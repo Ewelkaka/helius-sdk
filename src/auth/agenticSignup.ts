@@ -8,8 +8,7 @@ import { getProject } from "./getProject";
 import { executeCheckout } from "./checkout";
 import { OPENPAY_PLANS } from "./constants";
 import { isOpenPayPlan, buildEndpoints } from "./signupHelpers";
-
-const ALL_PLANS = ["basic", ...OPENPAY_PLANS];
+import { executeBasicSignup } from "./basicSignup";
 
 export async function agenticSignup(
   options: AgenticSignupOptions
@@ -23,7 +22,7 @@ export async function agenticSignup(
   // Validate plan
   if (plan !== "basic" && !isOpenPayPlan(plan)) {
     throw new Error(
-      `Unknown plan: ${plan}. Available: ${ALL_PLANS.join(", ")}`
+      `Unknown plan: ${plan}. Available: basic, ${OPENPAY_PLANS.join(", ")}`
     );
   }
 
@@ -105,7 +104,7 @@ export async function agenticSignup(
     };
   }
 
-  // ── New user paths ── All plans go through checkout
+  // ── New user paths ──
 
   if (isOpenPayPlan(plan)) {
     // Validate required contact info for new subscriptions
@@ -120,50 +119,52 @@ export async function agenticSignup(
           `Pass --email, --first-name, and --last-name.`
       );
     }
-  }
 
-  // Checkout for all plans (basic, developer, business, professional)
-  // Always use sponsored mode — payPaymentIntent falls back to self-funded if needed
-  const checkoutResult = await executeCheckout(
-    secretKey,
-    jwt,
-    {
-      plan,
-      period: options.period ?? "monthly",
-      refId: auth.refId,
-      email,
-      firstName,
-      lastName,
+    // OpenPay checkout for developer/business/professional
+    const checkoutResult = await executeCheckout(
+      secretKey,
+      jwt,
+      {
+        plan,
+        period: options.period ?? "monthly",
+        refId: auth.refId,
+        email,
+        firstName,
+        lastName,
+        walletAddress,
+        couponCode: options.couponCode,
+        paymentMode: "sponsored",
+      },
+      userAgent
+    );
+
+    if (checkoutResult.status !== "completed") {
+      throw new Error(
+        `Checkout ${checkoutResult.status}${checkoutResult.error ? `: ${checkoutResult.error}` : ""}${checkoutResult.txSignature ? `. TX: ${checkoutResult.txSignature}` : ""}`
+      );
+    }
+
+    if (!checkoutResult.projectId) {
+      throw new Error(
+        "Checkout completed but no project was provisioned. " +
+          `Payment intent: ${checkoutResult.paymentIntentId}`
+      );
+    }
+
+    return {
+      status: "success",
+      jwt,
       walletAddress,
-      couponCode: options.couponCode,
-      paymentMode: "sponsored",
-    },
-    userAgent
-  );
-
-  if (checkoutResult.status !== "completed") {
-    throw new Error(
-      `Checkout ${checkoutResult.status}${checkoutResult.error ? `: ${checkoutResult.error}` : ""}${checkoutResult.txSignature ? `. TX: ${checkoutResult.txSignature}` : ""}`
-    );
+      projectId: checkoutResult.projectId,
+      apiKey: checkoutResult.apiKey || null,
+      endpoints: checkoutResult.apiKey
+        ? buildEndpoints(checkoutResult.apiKey)
+        : null,
+      credits: null,
+      txSignature: checkoutResult.txSignature ?? undefined,
+    };
   }
 
-  if (!checkoutResult.projectId) {
-    throw new Error(
-      "Checkout completed but no project was provisioned. " +
-        `Payment intent: ${checkoutResult.paymentIntentId}`
-    );
-  }
-
-  return {
-    status: "success",
-    jwt,
-    walletAddress,
-    projectId: checkoutResult.projectId,
-    apiKey: checkoutResult.apiKey || null,
-    endpoints: checkoutResult.apiKey
-      ? buildEndpoints(checkoutResult.apiKey)
-      : null,
-    credits: null,
-    txSignature: checkoutResult.txSignature ?? undefined,
-  };
+  // Basic plan ($1 USDC) → sponsored payment → createProject
+  return executeBasicSignup(secretKey, jwt, walletAddress, userAgent);
 }

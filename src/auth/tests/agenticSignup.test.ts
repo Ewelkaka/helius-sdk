@@ -57,9 +57,26 @@ jest.mock("../checkout", () => ({
   }),
 }));
 
+jest.mock("../basicSignup", () => ({
+  executeBasicSignup: jest.fn().mockResolvedValue({
+    status: "success",
+    jwt: "jwt-token-123",
+    walletAddress: "WalletAddress123",
+    projectId: "proj-new",
+    apiKey: "key-abc",
+    endpoints: {
+      mainnet: "https://mainnet.helius-rpc.com/?api-key=key-abc",
+      devnet: "https://devnet.helius-rpc.com/?api-key=key-abc",
+    },
+    credits: null,
+    txSignature: "tx-sig-basic123",
+  }),
+}));
+
 import { agenticSignup } from "../agenticSignup";
 import { listProjects } from "../listProjects";
 import { executeCheckout, executeUpgrade } from "../checkout";
+import { executeBasicSignup } from "../basicSignup";
 
 const EXISTING_PROJECT = {
   id: "proj-existing",
@@ -76,10 +93,10 @@ describe("agenticSignup", () => {
     jest.clearAllMocks();
   });
 
-  // ── Basic plan (now via checkout) ──
+  // ── Basic plan (via executeBasicSignup) ──
 
-  describe("basic plan (via checkout)", () => {
-    it("creates a new project via checkout when no plan specified", async () => {
+  describe("basic plan (direct signup)", () => {
+    it("calls executeBasicSignup when no plan specified", async () => {
       const result = await agenticSignup({ secretKey: new Uint8Array(64) });
 
       expect(result.status).toBe("success");
@@ -87,50 +104,32 @@ describe("agenticSignup", () => {
       expect(result.walletAddress).toBe("WalletAddress123");
       expect(result.projectId).toBe("proj-new");
       expect(result.apiKey).toBe("key-abc");
-      expect(result.txSignature).toBe("tx-sig-abc123");
-      expect(result.endpoints).toEqual({
-        mainnet: "https://mainnet.helius-rpc.com/?api-key=key-abc",
-        devnet: "https://devnet.helius-rpc.com/?api-key=key-abc",
-      });
+      expect(result.txSignature).toBe("tx-sig-basic123");
 
-      expect(executeCheckout).toHaveBeenCalledWith(
+      expect(executeBasicSignup).toHaveBeenCalledWith(
         new Uint8Array(64),
         "jwt-token-123",
-        {
-          plan: "basic",
-          period: "monthly",
-          refId: "ref-1",
-          email: undefined,
-          firstName: undefined,
-          lastName: undefined,
-          walletAddress: "WalletAddress123",
-          couponCode: undefined,
-          paymentMode: "sponsored",
-        },
+        "WalletAddress123",
         undefined
       );
+      expect(executeCheckout).not.toHaveBeenCalled();
     });
 
-    it("creates a new project via checkout when plan='basic'", async () => {
-      const result = await agenticSignup({
+    it("calls executeBasicSignup when plan='basic'", async () => {
+      await agenticSignup({
         secretKey: new Uint8Array(64),
         plan: "basic",
       });
 
-      expect(result.status).toBe("success");
-      expect(executeCheckout).toHaveBeenCalledWith(
-        expect.any(Uint8Array),
-        "jwt-token-123",
-        expect.objectContaining({ plan: "basic" }),
-        undefined
-      );
+      expect(executeBasicSignup).toHaveBeenCalled();
+      expect(executeCheckout).not.toHaveBeenCalled();
     });
 
     it("treats empty string plan as basic", async () => {
       await agenticSignup({ secretKey: new Uint8Array(64), plan: "" });
 
-      const callArgs = (executeCheckout as jest.Mock).mock.calls[0];
-      expect(callArgs[2].plan).toBe("basic");
+      expect(executeBasicSignup).toHaveBeenCalled();
+      expect(executeCheckout).not.toHaveBeenCalled();
     });
 
     it("returns existing project when one exists (basic plan)", async () => {
@@ -140,38 +139,20 @@ describe("agenticSignup", () => {
 
       expect(result.status).toBe("existing_project");
       expect(result.projectId).toBe("proj-existing");
+      expect(executeBasicSignup).not.toHaveBeenCalled();
       expect(executeCheckout).not.toHaveBeenCalled();
-      expect(executeUpgrade).not.toHaveBeenCalled();
     });
 
-    it("always sets paymentMode to sponsored for new signups", async () => {
-      await agenticSignup({
-        secretKey: new Uint8Array(64),
-      });
-
-      const callArgs = (executeCheckout as jest.Mock).mock.calls[0];
-      expect(callArgs[2].paymentMode).toBe("sponsored");
-    });
-
-    it("passes userAgent through to checkout flow", async () => {
-      const { walletSignup } = require("../walletSignup");
-
+    it("passes userAgent through to basic signup", async () => {
       await agenticSignup({
         secretKey: new Uint8Array(64),
         userAgent: "test-agent/1.0",
       });
 
-      expect(walletSignup).toHaveBeenCalledWith(
-        "auth-msg",
-        "auth-sig",
-        "WalletAddress123",
-        "test-agent/1.0"
-      );
-
-      expect(executeCheckout).toHaveBeenCalledWith(
+      expect(executeBasicSignup).toHaveBeenCalledWith(
         new Uint8Array(64),
         "jwt-token-123",
-        expect.objectContaining({ plan: "basic", paymentMode: "sponsored" }),
+        "WalletAddress123",
         "test-agent/1.0"
       );
     });

@@ -60,13 +60,11 @@ const mockPaySponsoredIntent = paySponsoredIntent as jest.MockedFunction<
 
 const MOCK_PRICE_IDS = {
   Monthly: {
-    basic: "price_basic_monthly",
     developer_v4: "price_dev_monthly",
     business_v4: "price_biz_monthly",
     professional_v4: "price_pro_monthly",
   },
   Yearly: {
-    basic: "price_basic_yearly",
     developer_v4: "price_dev_yearly",
     business_v4: "price_biz_yearly",
     professional_v4: "price_pro_yearly",
@@ -96,12 +94,6 @@ const POLL_COMPLETED_RESPONSE = {
 describe("resolvePriceId", () => {
   beforeEach(() => jest.resetAllMocks());
 
-  it("resolves basic monthly", async () => {
-    mockFetchOpenPayPriceIds.mockResolvedValue(MOCK_PRICE_IDS);
-    const result = await resolvePriceId("jwt", "basic", "monthly");
-    expect(result).toBe("price_basic_monthly");
-  });
-
   it("resolves developer monthly", async () => {
     mockFetchOpenPayPriceIds.mockResolvedValue(MOCK_PRICE_IDS);
     const result = await resolvePriceId("jwt", "developer", "monthly");
@@ -128,7 +120,7 @@ describe("resolvePriceId", () => {
 
   it("includes available plans in error", async () => {
     await expect(resolvePriceId("jwt", "invalid", "monthly")).rejects.toThrow(
-      "Available: basic, developer, business, professional"
+      "Available: developer, business, professional"
     );
   });
 
@@ -633,7 +625,7 @@ describe("initializeSignupFunding", () => {
     mockAuthRequest.mockResolvedValue(INIT_RESPONSE);
 
     const funding = await initializeSignupFunding("jwt", {
-      plan: "basic",
+      plan: "developer",
       period: "monthly",
       refId: "ref-1",
     });
