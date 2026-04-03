@@ -32,8 +32,11 @@ export async function executeBasicSignup(
   // 2. Try sponsored path (no SOL needed)
   let txSignature: string;
   try {
-    const { transaction, lastValidBlockHeight } =
-      await requestBasicSponsoredTx(jwt, walletAddress, userAgent);
+    const { transaction, lastValidBlockHeight } = await requestBasicSponsoredTx(
+      jwt,
+      walletAddress,
+      userAgent
+    );
     txSignature = await signAndSubmitSponsoredTx(
       secretKey,
       transaction,
