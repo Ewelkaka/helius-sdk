@@ -1,8 +1,10 @@
 import type { CreateWebhookRequest, Webhook } from "../types/webhooks";
+import { getSDKHeaders } from "../http";
 
 export const createWebhook = async (
   apiKey: string,
-  params: CreateWebhookRequest
+  params: CreateWebhookRequest,
+  userAgent?: string
 ): Promise<Webhook> => {
   const url = `https://api.helius.xyz/v0/webhooks?api-key=${apiKey}`;
 
@@ -10,6 +12,7 @@ export const createWebhook = async (
     method: "POST",
     headers: {
       "Content-Type": "application/json",
+      ...getSDKHeaders(userAgent),
     },
     body: JSON.stringify(params),
   });

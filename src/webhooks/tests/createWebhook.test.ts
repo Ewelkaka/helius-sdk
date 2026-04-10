@@ -46,9 +46,9 @@ describe("createWebhook Tests", () => {
       `https://api.helius.xyz/v0/webhooks?api-key=test-key`,
       expect.objectContaining({
         method: "POST",
-        headers: {
+        headers: expect.objectContaining({
           "Content-Type": "application/json",
-        },
+        }),
         body: JSON.stringify(mockParams),
       })
     );
@@ -71,6 +71,38 @@ describe("createWebhook Tests", () => {
     await expect(rpc.webhooks.create(mockParams)).rejects.toThrow(
       "HTTP error! status: 400 - Bad Request"
     );
+  });
+
+  it("Sends custom userAgent as X-Helius-Client header", async () => {
+    const customRpc = createHelius({
+      apiKey: "test-key",
+      userAgent: "my-app/1.0",
+    });
+
+    const mockParams: CreateWebhookRequest = {
+      webhookURL: "https://hogwarts.edu/owlery",
+      transactionTypes: ["SPELL_CAST"],
+      accountAddresses: ["albusdumbledore.sol"],
+      webhookType: "enhanced",
+    };
+
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        webhookID: "test-id",
+        wallet: "albusdumbledore.sol",
+        webhookURL: "https://hogwarts.edu/owlery",
+        transactionTypes: ["SPELL_CAST"],
+        accountAddresses: ["albusdumbledore.sol"],
+        webhookType: "enhanced",
+      }),
+    });
+
+    await customRpc.webhooks.create(mockParams);
+
+    const [, init] = mockFetch.mock.calls[0];
+    expect(init.headers["User-Agent"]).toMatch(/^helius-node-sdk\//);
+    expect(init.headers["X-Helius-Client"]).toBe("my-app/1.0");
   });
 
   it("Handles Helius API errors", async () => {

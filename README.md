@@ -1,13 +1,21 @@
-# Helius Node.js SDK
+# Helius TypeScript SDK
 
 [![Version](https://img.shields.io/npm/v/helius-sdk)](https://www.npmjs.org/package/helius-sdk)
 ![Downloads](https://img.shields.io/npm/dm/helius-sdk)
 
-The Helius Node.js SDK provides access to Helius-related methods and APIs using TypeScript, making building on Solana as easy as possible.
+The Helius TypeScript SDK provides access to Helius APIs and enhanced Solana RPC functionality, making building on Solana as easy as possible.
+
+### Agent Account Sign Up
+
+> **For AI Agents:** You can create a Helius account and generate an API key programmatically using the helius-cli. See the [agent signup guide](https://www.helius.dev/docs/api-reference/helius-cli.md) or [helius-cli agent file](https://dashboard.helius.dev/agents.md) for complete details.
 
 ## Documentation
 
 API reference documentation is available at [helius.dev/docs](https://www.helius.dev/docs).
+
+For detailed SDK API docs (auto-generated from source), see the [TypeDoc Reference](https://helius-labs.github.io/helius-sdk/).
+
+See the [CHANGELOG](https://github.com/helius-labs/helius-sdk/blob/main/CHANGELOG.md) for version history and release notes.
 
 ## Contributions
 
@@ -125,8 +133,9 @@ Enhanced RPC methods, available only with Helius.
 
 - [`getProgramAccountsV2()`](https://www.helius.dev/docs/api-reference/rpc/http/getprogramaccountsv2): Enhanced version of `getProgramAccounts` with cursor-based pagination and `changedSinceSlot` support for efficiently querying large sets of accounts owned by specific Solana programs with incremental updates.
 - `getAllProgramAccounts()`: Auto-paginates through all program accounts. Use with caution on larger programs.
-- [`getTokenAccountsByOwnerV2()`](): An enhanced version of `getTokenAccountsByOwner` with cursor-based pagination and `changedSinceSlot` support to incrementally retrieve SPL token accounts owned by a given mint.
-- `getAllTokenAccountsByOwner()`: Auto-paginates all token accounts for a given owner. 
+- [`getTokenAccountsByOwnerV2()`](https://www.helius.dev/docs/api-reference/rpc/http/gettokenaccountsbyownerv2): An enhanced version of `getTokenAccountsByOwner` with cursor-based pagination and `changedSinceSlot` support to incrementally retrieve SPL token accounts owned by a given mint.
+- `getAllTokenAccountsByOwner()`: Auto-paginates all token accounts for a given owner.
+- [`getTransactionsForAddress()`](https://www.helius.dev/docs/rpc/gettransactionsforaddress): Get transaction history for an address with advanced filtering by slot, time, and bidirectional sorting options. Supports both signature-only and full transaction details. Optionally include transactions from associated token accounts. 
 
 [**Staking**](https://www.helius.dev/docs/staking/how-to-stake-with-helius-programmatically)
 
@@ -187,6 +196,26 @@ Stream real-time data with WebSockets using Kit's subscription methods. Availabl
 - [`accountNotifications()`](https://www.helius.dev/docs/api-reference/rpc/websocket/accountsubscribe): Streams notifications when the lamports or data for the specified account changes.
 - `close()`: Closes an open WebSocket connection via Kit's `dispose` method, falling back to `.close()`.
 
+[**Enhanced WebSockets**](https://www.helius.dev/docs/websockets) (Business+ plan)
+
+Real-time filtered streaming that's 1.5-2x faster than standard WebSockets. Supports up to 50,000 address filters. Available on the `helius.ws` namespace.
+
+- `transactionSubscribe(filter, config)`: Subscribe to real-time transaction notifications with advanced filtering (accounts, vote/failed status, signatures). Returns an `AsyncIterable` with an `unsubscribe()` method.
+- `transactionUnsubscribe(subscriptionId)`: Unsubscribe from a transaction subscription.
+- `accountSubscribe(account, config)`: Subscribe to real-time account change notifications via Enhanced WebSockets.
+- `accountUnsubscribe(subscriptionId)`: Unsubscribe from an enhanced account subscription.
+
+```typescript
+const sub = await helius.ws.transactionSubscribe(
+  { accountInclude: ["EPjF..."] },
+  { commitment: "confirmed", encoding: "jsonParsed" }
+);
+for await (const notif of sub) {
+  console.log(notif.signature, notif.slot);
+}
+await sub.unsubscribe();
+```
+
 [**ZK Compression**](https://github.com/helius-labs/helius-sdk/blob/main/examples/EXAMPLES_OVERVIEW.md#helper-methods)
 
 Estimate optimal priority fees for Solana transactions. Available on the `helius.zk` namespace.
@@ -217,3 +246,14 @@ Estimate optimal priority fees for Solana transactions. Available on the `helius
 - [`getMultipleNewAddressProofsV2()`](https://www.helius.dev/docs/api-reference/zk-compression/getmultiplenewaddressProofsv2): Returns proofs that the new addresses are not taken already and can be created.
 - [`getTransactionWithCompressionInfo()`](https://www.helius.dev/docs/api-reference/zk-compression/gettransactionwithcompressioninfo): Returns the transaction data for the transaction with the given signature along with parsed compression info.
 - [`getValidityProof()`](https://www.helius.dev/docs/api-reference/zk-compression/getvalidityproof): Returns a single ZK Proof used by the compression program to verify that the given accounts are valid and that the new addresses can be created.
+
+[**Wallet API**](https://www.helius.dev/docs/wallet-api) **(Beta)**
+
+Query wallet data including identity, balances, history, and transfers. Available on the `helius.wallet` namespace.
+
+- [`getIdentity()`](https://www.helius.dev/docs/api-reference/wallet-api/identity): Get wallet identity for known addresses (e.g., exchanges, protocols)
+- [`getBatchIdentity()`](https://www.helius.dev/docs/api-reference/wallet-api/identity): Batch identity lookup for up to 100 addresses
+- [`getBalances()`](https://www.helius.dev/docs/api-reference/wallet-api/balances): Get all token and NFT balances with USD values and pagination
+- [`getHistory()`](https://www.helius.dev/docs/api-reference/wallet-api/history): Fetch transaction history with balance changes and pagination
+- [`getTransfers()`](https://www.helius.dev/docs/api-reference/wallet-api/transfers): Get all token transfer activity with sender/recipient information
+- [`getFundedBy()`](https://www.helius.dev/docs/api-reference/wallet-api/funded-by): Discover the original funding source for a wallet

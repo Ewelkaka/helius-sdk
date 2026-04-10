@@ -5,6 +5,8 @@ import {
   DEFAULT_RPC_CONFIG,
 } from "@solana/kit";
 
+import { getSDKHeaders } from "../http";
+
 import { wrapAutoSend } from "./wrapAutoSend";
 import type { WebhookClient } from "../webhooks/client";
 import type {
@@ -31,83 +33,169 @@ import type { GetProgramAccountsV2Fn } from "./methods/getProgramAccountsV2";
 import type { GetAllProgramAccountsFn } from "./methods/getAllProgramAccounts";
 import type { GetTokenAccountsByOwnerV2Fn } from "./methods/getTokenAccountsByOwnerV2";
 import type { GetAllTokenAccountsByOwnerFn } from "./methods/getAllTokenAccountsByOwner.js";
+import type { GetTransactionsForAddressFn } from "./methods/getTransactionsForAddress";
 import type { EnhancedTxClientLazy } from "../enhanced";
 import { TxHelpersLazy } from "../transactions";
 import type { ResolvedHeliusRpcApi } from "./heliusRpcApi";
 import { makeWsAsync, WsAsync } from "../websockets/wsAsync";
 import { StakeClientLazy } from "../staking/client";
 import { ZkClientLazy } from "../zk/client";
+import type { WalletClient } from "../wallet/client";
+import type { AuthClient } from "../auth/types";
+import type { HeliusRpcOptions } from "./types";
 
-interface HeliusRpcOptions {
-  apiKey: string;
-  network?: "mainnet" | "devnet";
-  rebateAddress?: string;
-}
+export type { HeliusRpcOptions };
 
+/**
+ * The main Helius SDK client. Provides access to all Helius and Solana RPC
+ * methods, DAS (Digital Asset Standard) queries, priority fee estimation,
+ * webhooks, enhanced transaction parsing, smart transaction helpers,
+ * WebSocket subscriptions, staking, and ZK compression.
+ *
+ * All standard Solana RPC methods (e.g. `getBalance`, `getSlot`) are available
+ * directly on this object via a Proxy that delegates to the underlying
+ * `@solana/kit` RPC client.
+ *
+ * Sub-clients (`webhooks`, `enhanced`, `tx`, `ws`, `stake`, `zk`, `wallet`)
+ * are lazily loaded on first access to keep the initial bundle minimal.
+ */
 export type HeliusClient = ResolvedHeliusRpcApi & {
+  /** The unwrapped Solana RPC client for direct access to standard RPC methods. */
   raw: ResolvedHeliusRpcApi;
 
-  // DAS
+  // ── DAS (Digital Asset Standard) ──────────────────────────────────
+
+  /** Fetch a single asset by its ID (mint address). */
   getAsset: GetAssetFn;
+  /** Fetch multiple assets by their IDs in a single batch request. */
   getAssetBatch: GetAssetBatchFn;
+  /** Get the Merkle proof for a compressed asset. */
   getAssetProof: GetAssetProofFn;
+  /** Get Merkle proofs for multiple compressed assets in a batch. */
   getAssetProofBatch: GetAssetProofBatchFn;
+  /** List assets by their update authority address. */
   getAssetsByAuthority: GetAssetsByAuthorityFn;
+  /** List assets created by a specific creator address. */
   getAssetsByCreator: GetAssetsByCreatorFn;
+  /** List assets belonging to a specific group (e.g. a collection). */
   getAssetsByGroup: GetAssetsByGroupFn;
+  /** List all assets owned by a wallet address. */
   getAssetsByOwner: GetAssetsByOwnerFn;
+  /** Get transaction signatures related to an asset. */
   getSignaturesForAsset: GetSignaturesForAssetFn;
+  /** Get print editions for an NFT master edition. */
   getNftEditions: GetNftEditionsFn;
+  /** Get token accounts filtered by mint or owner. */
   getTokenAccounts: GetTokenAccountsFn;
+  /** Search for assets using flexible filters (owner, creator, collection, etc.). */
   searchAssets: SearchAssetsFn;
 
-  // Priority Fee API
+  // ── Priority Fee API ──────────────────────────────────────────────
+
+  /** Estimate priority fees for a transaction or set of account keys. */
   getPriorityFeeEstimate: GetPriorityFeeEstimateFn;
 
-  // V2 RPC methods
-  getProgramAccountsV2: GetProgramAccountsV2Fn;
-  getAllProgramAccounts: GetAllProgramAccountsFn;
-  getTokenAccountsByOwnerV2: GetTokenAccountsByOwnerV2Fn;
-  getAllTokenAccountsByOwner: GetAllTokenAccountsByOwnerFn;
+  // ── V2 RPC Methods ────────────────────────────────────────────────
 
-  // Webhooks
+  /** Paginated version of `getProgramAccounts` with cursor-based pagination. */
+  getProgramAccountsV2: GetProgramAccountsV2Fn;
+  /** Auto-paginating variant that fetches all program accounts across pages. */
+  getAllProgramAccounts: GetAllProgramAccountsFn;
+  /** Paginated version of `getTokenAccountsByOwner` with cursor-based pagination. */
+  getTokenAccountsByOwnerV2: GetTokenAccountsByOwnerV2Fn;
+  /** Auto-paginating variant that fetches all token accounts for an owner. */
+  getAllTokenAccountsByOwner: GetAllTokenAccountsByOwnerFn;
+  /** Get transactions for a specific address with rich filtering and pagination. */
+  getTransactionsForAddress: GetTransactionsForAddressFn;
+
+  // ── Webhooks ──────────────────────────────────────────────────────
+
+  /** Webhook management client. Requires an API key. */
   webhooks: {
+    /** Create a new webhook subscription. */
     create(params: CreateWebhookRequest): Promise<Webhook>;
+    /** Get a webhook by its ID. */
     get(webhookID: string): Promise<Webhook>;
+    /** List all webhooks for the current API key. */
     getAll(): Promise<Webhook[]>;
+    /** Update an existing webhook. */
     update(webhookID: string, params: UpdateWebhookRequest): Promise<Webhook>;
+    /** Delete a webhook by its ID. */
     delete(webhookID: string): Promise<boolean>;
+    /** Enable or disable a webhook without deleting it. Use this to re-enable auto-disabled webhooks or temporarily pause deliveries. */
+    toggle(webhookID: string, active: boolean): Promise<Webhook>;
   } & WebhookClient;
 
-  // Enhanced Transactions
+  /** Enhanced transaction parsing client. Requires an API key. */
   enhanced: EnhancedTxClientLazy;
 
-  // Transaction Helpers
+  /** Smart transaction helpers for building, signing, and sending transactions with automatic compute budget and priority fees. */
   tx: TxHelpersLazy;
 
-  // WebSocket RPC subscriptions
+  /** WebSocket RPC subscriptions (logs, slots, signatures, programs, accounts). */
   ws: WsAsync;
 
-  // Staking helpers
+  /** Helius native staking helpers (stake, unstake, withdraw to the Helius validator). */
   stake: StakeClientLazy;
 
-  // ZK Compression
+  /** ZK compression RPC methods for Light Protocol compressed accounts and tokens. */
   zk: ZkClientLazy;
+
+  /** Wallet API client. Requires an API key. */
+  wallet: WalletClient;
+
+  /** Auth client for agentic signup, checkout, and account management. */
+  auth: AuthClient;
 };
 
+/**
+ * Create a Helius SDK client.
+ *
+ * @example
+ * ```ts
+ * import { createHelius } from "helius-sdk";
+ *
+ * const helius = createHelius({ apiKey: "YOUR_API_KEY" });
+ *
+ * // Standard Solana RPC
+ * const balance = await helius.getBalance("So11...").send();
+ *
+ * // DAS — fetch an asset
+ * const asset = await helius.getAsset({ id: "MINT_ADDRESS" });
+ *
+ * // Smart transactions
+ * const sig = await helius.tx.sendSmartTransaction({ signers, instructions });
+ * ```
+ */
 export const createHelius = ({
   apiKey,
   network = "mainnet",
   rebateAddress,
+  baseUrl,
+  userAgent,
 }: HeliusRpcOptions): HeliusClient => {
-  const baseUrl = `https://${network}.helius-rpc.com/`;
-  const rebateParam = rebateAddress ? `&rebate-address=${rebateAddress}` : "";
-  const url = `${baseUrl}?api-key=${apiKey}${rebateParam}`;
+  // Use custom baseUrl if provided, otherwise construct from network
+  const resolvedBaseUrl = baseUrl ?? `https://${network}.helius-rpc.com/`;
+
+  // Build query parameters
+  const queryParams: string[] = [];
+  if (apiKey) {
+    queryParams.push(`api-key=${apiKey}`);
+  }
+  if (rebateAddress) {
+    queryParams.push(`rebate-address=${rebateAddress}`);
+  }
+
+  const queryString = queryParams.length > 0 ? `?${queryParams.join("&")}` : "";
+  const url = `${resolvedBaseUrl}${queryString}`;
 
   const solanaApi = createSolanaRpcApi(DEFAULT_RPC_CONFIG);
-  const transport = createDefaultRpcTransport({ url });
-  const customTransport = async <TResponse>(
-    request: Parameters<typeof transport>[0]
+  const baseTransport = createDefaultRpcTransport({
+    url,
+    headers: getSDKHeaders(userAgent),
+  });
+  const transport = async <TResponse>(
+    request: Parameters<typeof baseTransport>[0]
   ): Promise<TResponse> => {
     const payload = {
       ...(request.payload as Record<string, unknown>),
@@ -119,14 +207,42 @@ export const createHelius = ({
       payload,
     };
 
-    return transport(modifiedRequest) as Promise<TResponse>;
+    return baseTransport(modifiedRequest) as Promise<TResponse>;
   };
 
-  const baseRpc = createRpc({ api: solanaApi, transport: customTransport });
+  const baseRpc = createRpc({ api: solanaApi, transport });
   const raw: ResolvedHeliusRpcApi = wrapAutoSend(baseRpc);
 
   const wsUrl = new URL(url);
   wsUrl.protocol = "wss:";
+
+  // Build Enhanced WebSocket URL for Helius Enhanced WS subscriptions
+  let enhancedWsUrl: string | undefined;
+  let enhancedDisabledReason: string | undefined;
+
+  const resolvedNetwork = (() => {
+    if (baseUrl) {
+      try {
+        const host = new URL(baseUrl).hostname;
+        if (host === "devnet.helius-rpc.com") return "devnet";
+        if (host === "mainnet.helius-rpc.com") return "mainnet";
+      } catch {
+        // Malformed baseUrl — fall through to non-Helius path
+      }
+      return null; // non-Helius or unparseable host
+    }
+    return network;
+  })();
+
+  if (!apiKey) {
+    enhancedDisabledReason =
+      "An API key is required for Enhanced WebSocket subscriptions. Provide apiKey in createHelius() options.";
+  } else if (resolvedNetwork === null) {
+    enhancedDisabledReason = `Enhanced WebSocket subscriptions require a standard Helius endpoint (mainnet.helius-rpc.com or devnet.helius-rpc.com). Custom baseUrl '${baseUrl}' is not supported.`;
+  } else {
+    const net = resolvedNetwork === "devnet" ? "devnet" : "mainnet";
+    enhancedWsUrl = `wss://atlas-${net}.helius-rpc.com/?api-key=${apiKey}`;
+  }
 
   // Lazily create when/if transaction helpers need it
   let rpcSubscriptionsPromise:
@@ -149,7 +265,11 @@ export const createHelius = ({
   defineLazyNamespace<HeliusClient, WsAsync>(client, "ws", async () => {
     // Promisified facade; individual methods return Promise<...>
     // so: await helius.ws.logsNotifications(...).subscribe(...) and no stupid TypeScript warnings
-    const ws = makeWsAsync(wsUrl.toString());
+    const ws = makeWsAsync(
+      wsUrl.toString(),
+      enhancedWsUrl,
+      enhancedDisabledReason
+    );
     client.close = () => ws.close();
     return ws;
   });
@@ -329,14 +449,30 @@ export const createHelius = ({
     }
   );
 
+  defineLazyMethod<HeliusClient, GetTransactionsForAddressFn>(
+    client,
+    "getTransactionsForAddress",
+    async () => {
+      const { makeGetTransactionsForAddress } = await import(
+        "./methods/getTransactionsForAddress.js"
+      );
+      return makeGetTransactionsForAddress(call);
+    }
+  );
+
   defineLazyNamespace<HeliusClient, WebhookClient>(
     client,
     "webhooks",
     async () => {
+      if (!apiKey) {
+        throw new Error(
+          "An API key is required to use webhooks/enhanced transactions. Provide apiKey in createHelius() options."
+        );
+      }
       // This one import is enough since the sub-methods in the webhook client
       // are themselves lazily imported inside makeWebhookClient
       const { makeWebhookClient } = await import("../webhooks/client.js");
-      return makeWebhookClient(apiKey);
+      return makeWebhookClient(apiKey, userAgent);
     }
   );
 
@@ -344,8 +480,13 @@ export const createHelius = ({
     client,
     "enhanced",
     async () => {
+      if (!apiKey) {
+        throw new Error(
+          "An API key is required to use webhooks/enhanced transactions. Provide apiKey in createHelius() options."
+        );
+      }
       const { makeEnhancedTxClientLazy } = await import("../enhanced");
-      return makeEnhancedTxClientLazy(apiKey, network);
+      return makeEnhancedTxClientLazy(apiKey, network, userAgent);
     }
   );
 
@@ -375,6 +516,25 @@ export const createHelius = ({
   defineLazyNamespace<HeliusClient, ZkClientLazy>(client, "zk", async () => {
     const { makeZkClientLazy } = await import("../zk/client");
     return makeZkClientLazy(call);
+  });
+
+  defineLazyNamespace<HeliusClient, WalletClient>(
+    client,
+    "wallet",
+    async () => {
+      if (!apiKey) {
+        throw new Error(
+          "An API key is required to use the Wallet API. Provide apiKey in createHelius() options."
+        );
+      }
+      const { makeWalletClient } = await import("../wallet/client.js");
+      return makeWalletClient(apiKey, userAgent);
+    }
+  );
+
+  defineLazyNamespace<HeliusClient, AuthClient>(client, "auth", async () => {
+    const { makeAuthClient } = await import("../auth/client.js");
+    return makeAuthClient(userAgent);
   });
 
   // So we can send standard RPC calls

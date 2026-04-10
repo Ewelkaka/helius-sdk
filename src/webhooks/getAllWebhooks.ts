@@ -1,12 +1,17 @@
 import type { Webhook } from "../types/webhooks";
+import { getSDKHeaders } from "../http";
 
-export const getAllWebhooks = async (apiKey: string): Promise<Webhook[]> => {
+export const getAllWebhooks = async (
+  apiKey: string,
+  userAgent?: string
+): Promise<Webhook[]> => {
   const url = `https://api.helius.xyz/v0/webhooks?api-key=${apiKey}`;
 
   const response = await fetch(url, {
     method: "GET",
     headers: {
       "Content-Type": "application/json",
+      ...getSDKHeaders(userAgent),
     },
   });
 

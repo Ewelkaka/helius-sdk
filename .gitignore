@@ -3,7 +3,9 @@
 
 # Build/Output
 /dist
+/docs
 /coverage
+src/version.ts
 
 # Logs
 *.log
@@ -31,4 +33,5 @@ Thumbs.db
 # Misc
 *.bak
 .claude
+.mcp.json
 src/main.ts

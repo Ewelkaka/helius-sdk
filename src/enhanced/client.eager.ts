@@ -4,6 +4,7 @@ import {
   type GetEnhancedTransactionsByAddressRequest,
   type GetEnhancedTransactionsByAddressResponse,
 } from "./types";
+import { getSDKHeaders } from "../http";
 
 export interface EnhancedTxClient {
   getTransactions: (
@@ -44,7 +45,8 @@ const handle = async <T>(res: Response): Promise<T> => {
 
 export const makeEnhancedTxClientEager = (
   apiKey: string,
-  network: "mainnet" | "devnet" = "mainnet"
+  network: "mainnet" | "devnet" = "mainnet",
+  userAgent?: string
 ): EnhancedTxClient => {
   const base =
     network === "devnet"
@@ -59,7 +61,10 @@ export const makeEnhancedTxClientEager = (
 
     const res = await fetch(url, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...getSDKHeaders(userAgent),
+      },
       body: JSON.stringify({ transactions }),
     });
 
@@ -67,20 +72,49 @@ export const makeEnhancedTxClientEager = (
   };
 
   const getTransactionsByAddress: EnhancedTxClient["getTransactionsByAddress"] =
-    async ({ address, before, until, commitment, source, type, limit }) => {
+    async ({
+      address,
+      beforeSignature,
+      afterSignature,
+      commitment,
+      source,
+      type,
+      limit,
+      gtSlot,
+      gteSlot,
+      ltSlot,
+      lteSlot,
+      gtTime,
+      gteTime,
+      ltTime,
+      lteTime,
+      sortOrder,
+    }) => {
       const url =
         `${base}/addresses/${address}/transactions` +
         qs({
           "api-key": apiKey,
-          before,
-          until,
+          "before-signature": beforeSignature,
+          "after-signature": afterSignature,
           commitment,
           source,
           type,
           limit,
+          "gt-slot": gtSlot,
+          "gte-slot": gteSlot,
+          "lt-slot": ltSlot,
+          "lte-slot": lteSlot,
+          "gt-time": gtTime,
+          "gte-time": gteTime,
+          "lt-time": ltTime,
+          "lte-time": lteTime,
+          "sort-order": sortOrder,
         });
 
-      const res = await fetch(url, { method: "GET" });
+      const res = await fetch(url, {
+        method: "GET",
+        headers: getSDKHeaders(userAgent),
+      });
       return handle<GetEnhancedTransactionsByAddressResponse>(res);
     };
 

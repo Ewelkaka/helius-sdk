@@ -8,6 +8,7 @@ import {
 } from "@solana/kit";
 import { wrapAutoSend } from "./wrapAutoSend";
 import { makeRpcCaller } from "./caller";
+import { getSDKHeaders } from "../http";
 
 import { GetAssetFn, makeGetAsset } from "./methods/getAsset";
 import { GetAssetBatchFn, makeGetAssetBatch } from "./methods/getAssetBatch";
@@ -37,6 +38,10 @@ import {
   makeWebhookClientEager,
   type WebhookClient,
 } from "../webhooks/client.eager";
+import {
+  makeWalletClientEager,
+  type WalletClient,
+} from "../wallet/client.eager";
 import {
   GetAssetsByOwnerFn,
   makeGetAssetsByOwner,
@@ -76,6 +81,11 @@ import {
   GetAllTokenAccountsByOwnerFn,
   makeGetAllTokenAccountsByOwner,
 } from "./methods/getAllTokenAccountsByOwner";
+import {
+  GetTransactionsForAddressFn,
+  makeGetTransactionsForAddress,
+} from "./methods/getTransactionsForAddress";
+import type { HeliusRpcOptions } from "./types";
 
 export interface HeliusClientEager {
   raw: ResolvedHeliusRpcApi;
@@ -99,30 +109,44 @@ export interface HeliusClientEager {
   getAllProgramAccounts: GetAllProgramAccountsFn;
   getTokenAccountsByOwnerV2: GetTokenAccountsByOwnerV2Fn;
   getAllTokenAccountsByOwner: GetAllTokenAccountsByOwnerFn;
+  getTransactionsForAddress: GetTransactionsForAddressFn;
 
   webhooks: WebhookClient;
 
   enhanced: EnhancedTxClient;
 
   tx: TxHelpersEager;
-}
 
-export type HeliusRpcOptions = {
-  apiKey: string;
-  network?: "mainnet" | "devnet";
-  rebateAddress?: string;
-};
+  wallet: WalletClient;
+}
 
 export const createHeliusEager = ({
   apiKey,
   network = "mainnet",
   rebateAddress,
+  baseUrl,
+  userAgent,
 }: HeliusRpcOptions): HeliusClientEager => {
-  const rebateParam = rebateAddress ? `&rebate-address=${rebateAddress}` : "";
-  const url = `https://${network}.helius-rpc.com/?api-key=${apiKey}${rebateParam}`;
+  // Use custom baseUrl if provided, otherwise construct from network
+  const resolvedBaseUrl = baseUrl ?? `https://${network}.helius-rpc.com/`;
+
+  // Build query parameters
+  const queryParams: string[] = [];
+  if (apiKey) {
+    queryParams.push(`api-key=${apiKey}`);
+  }
+  if (rebateAddress) {
+    queryParams.push(`rebate-address=${rebateAddress}`);
+  }
+
+  const queryString = queryParams.length > 0 ? `?${queryParams.join("&")}` : "";
+  const url = `${resolvedBaseUrl}${queryString}`;
 
   const solanaApi = createSolanaRpcApi(DEFAULT_RPC_CONFIG);
-  const transport = createDefaultRpcTransport({ url });
+  const transport = createDefaultRpcTransport({
+    url,
+    headers: getSDKHeaders(userAgent),
+  });
 
   let baseRpc = createRpc({ api: solanaApi, transport });
   // Cast to any because I cba to go down this type rabbit hole
@@ -155,14 +179,39 @@ export const createHeliusEager = ({
     getAllProgramAccounts: makeGetAllProgramAccounts(call),
     getTokenAccountsByOwnerV2: makeGetTokenAccountsByOwnerV2(call),
     getAllTokenAccountsByOwner: makeGetAllTokenAccountsByOwner(call),
+    getTransactionsForAddress: makeGetTransactionsForAddress(call),
 
     // Webhooks
-    webhooks: makeWebhookClientEager(apiKey),
+    get webhooks() {
+      if (!apiKey) {
+        throw new Error(
+          "An API key is required to use webhooks/enhanced transactions. Provide apiKey in createHelius() options."
+        );
+      }
+      return makeWebhookClientEager(apiKey, userAgent);
+    },
 
     // Enhanced Transactions
-    enhanced: makeEnhancedTxClientEager(apiKey, network),
+    get enhanced() {
+      if (!apiKey) {
+        throw new Error(
+          "An API key is required to use webhooks/enhanced transactions. Provide apiKey in createHelius() options."
+        );
+      }
+      return makeEnhancedTxClientEager(apiKey, network, userAgent);
+    },
 
     // Transaction helpers
     tx: makeTxHelpersEager(baseRpc as unknown as Rpc<SolanaRpcApi>),
+
+    // Wallet API
+    get wallet() {
+      if (!apiKey) {
+        throw new Error(
+          "An API key is required to use the Wallet API. Provide apiKey in createHelius() options."
+        );
+      }
+      return makeWalletClientEager(apiKey, userAgent);
+    },
   };
 };
